@@ -14,12 +14,14 @@ set -euo pipefail
 #
 # Optional:
 #   PYTHON_BIN=/path/to/python
+#   LOG_DIR=/path/to/logs
 
 COHORT_DIR="${COHORT_DIR:-$HOME/repo/readmit-stgnn/stgnn/data/mimic_processed}"
 SAVE_DIR="${SAVE_DIR:-$HOME/repo/readmit-stgnn/stgnn/data/mimic_processed}"
 PYTHON_BIN="${PYTHON_BIN:-python}"
+LOG_DIR="${LOG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}/logs}"
 
-mkdir -p "$(dirname "$0")/../logs" "$SAVE_DIR"
+mkdir -p "$LOG_DIR" "$SAVE_DIR"
 
 echo "Running EHR preprocessing..."
 echo "COHORT_DIR=$COHORT_DIR"
