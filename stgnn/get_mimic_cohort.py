@@ -1,15 +1,24 @@
 import argparse
+import json
 import os
 
 import numpy as np
 import pandas as pd
 from pandarallel import pandarallel
-from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 from constants import LAB_COLS
 
 tqdm.pandas()
+
+DEFAULT_RAW_DATA_DIR = os.path.expandvars("$HOME/database/mimic-iv/mimiciv/2.2")
+DEFAULT_SAVE_DIR = os.path.expandvars("$HOME/repo/readmit-stgnn/stgnn/data/mimic_processed")
+DEFAULT_SPLIT_JSON = os.path.expandvars(
+    "$HOME/repo/ehr-text-multi-modal/results/mimiciv/splits/ethos_train_val_patients__mimic_train_timelines_p241015__vf-0p04.json"
+)
+DEFAULT_TEST_PARQUET = os.path.expandvars(
+    "$HOME/repo/ehr-text-multi-modal/results/mimiciv/ethos_zero_shot/test_eval/hospital_readmission/output_with_note.predictions.parquet"
+)
 
 
 def main(args):
@@ -46,11 +55,15 @@ def main(args):
         df_admission.died, "deathtime"]
 
     # Split patients into train/val/test
-    test_patients = pd.read_csv("../data/mimic_our_test_cohort.csv").subject_id
-    train_val_patients = list(set(df_admission["subject_id"]).difference(test_patients))
-    train_patients, val_patients = train_test_split(
-        train_val_patients, test_size=0.1, random_state=12
+    test_hadm_ids = pd.read_parquet(args.test_parquet, columns=["hadm_id"]).hadm_id
+    test_patients = set(
+        df_admission.loc[df_admission.hadm_id.isin(test_hadm_ids), "subject_id"]
     )
+
+    with open(args.split_json) as f:
+        split_data = json.load(f)
+    train_patients = set(int(x) for x in split_data["train_patient_ids"])
+    val_patients = set(int(x) for x in split_data["val_patient_ids"])
 
     def assign_split(id):
         if id in train_patients:
@@ -194,10 +207,28 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Filtering admission info from MIMIC-IV.")
     parser.add_argument(
-        "--raw_data_dir", type=str, help="Dir to downloaded MIMIC-IV data."
+        "--raw_data_dir",
+        type=str,
+        default=DEFAULT_RAW_DATA_DIR,
+        help="Dir to downloaded MIMIC-IV data. Default: %(default)s",
     )
     parser.add_argument(
-        "--save_dir", type=str, help="Dir to save filtered cohort files."
+        "--save_dir",
+        type=str,
+        default=DEFAULT_SAVE_DIR,
+        help="Dir to save filtered cohort files. Default: %(default)s",
+    )
+    parser.add_argument(
+        "--split_json",
+        type=str,
+        default=DEFAULT_SPLIT_JSON,
+        help="Path to ehr-text-multi-modal train/val split JSON. Default: %(default)s",
+    )
+    parser.add_argument(
+        "--test_parquet",
+        type=str,
+        default=DEFAULT_TEST_PARQUET,
+        help="Path to ehr-text-multi-modal test predictions parquet (used for test hadm_ids). Default: %(default)s",
     )
     args = parser.parse_args()
     main(args)

@@ -35,6 +35,19 @@ python stgnn/preprocess_ehr.py --cohort_dir <dir-to-files-from-the-prev-step>  -
 ```
 where `<ehr-feature-dir>` is where the preprocessed EHR features will be saved. 
 
+#### SLURM jobs for preprocessing
+Two ready-to-submit scripts are included under `slurm/`:
+
+```bash
+# 1) Cohort extraction
+sbatch --export=ALL,RAW_DATA_DIR=$HOME/database/mimic-iv/mimiciv/2.2,SAVE_DIR=$HOME/repo/readmit-stgnn/stgnn/data/mimic_processed,SPLIT_JSON=$HOME/repo/ehr-text-multi-modal/results/mimiciv/splits/ethos_train_val_patients__mimic_train_timelines_p241015__vf-0p04.json,TEST_PARQUET=$HOME/repo/ehr-text-multi-modal/results/mimiciv/ethos_zero_shot/test_eval/hospital_readmission/output_with_note.predictions.parquet slurm/get_mimic_cohort.sbatch
+
+# 2) EHR preprocessing
+sbatch --export=ALL,COHORT_DIR=$HOME/repo/readmit-stgnn/stgnn/data/mimic_processed,SAVE_DIR=$HOME/repo/readmit-stgnn/stgnn/data/mimic_processed slurm/preprocess_ehr.sbatch
+```
+
+Optional override: add `,PYTHON_BIN=/path/to/python` to either `--export` list.
+
 
 
 ## Models
