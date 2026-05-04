@@ -13,6 +13,8 @@ tqdm.pandas()
 
 DEFAULT_RAW_DATA_DIR = os.path.expandvars("$HOME/database/mimic-iv/mimiciv/2.2")
 DEFAULT_SAVE_DIR = os.path.expandvars("$HOME/repo/readmit-stgnn/stgnn/data/mimic_processed")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(SCRIPT_DIR, "data")
 DEFAULT_SPLIT_JSON = os.path.expandvars(
     "$HOME/repo/ehr-text-multi-modal/results/mimiciv/splits/ethos_train_val_patients__mimic_train_timelines_p241015__vf-0p04.json"
 )
@@ -108,7 +110,7 @@ def main(args):
     df_prescriptions = df_prescriptions.loc[df_prescriptions.starttime.notnull()].copy()
 
     # Map NDC to therapeutic classes
-    df_med_map = pd.read_csv("../data/ndc2therapeutic.csv").dropna()
+    df_med_map = pd.read_csv(os.path.join(DATA_DIR, "ndc2therapeutic.csv")).dropna()
     df_med_map = df_med_map.groupby(
         "NDC_MEDICATION_CODE").MED_THERAPEUTIC_CLASS_DESCRIPTION.first().to_dict()
 
@@ -139,7 +141,7 @@ def main(args):
     df_diag = df_diag[df_diag.hadm_id.isin(df_admission.hadm_id)]
     df_diag.icd_code = df_diag.icd_code.str.replace(".", "").str[:3]
 
-    df_icd = pd.read_csv("../data/ICD10_Groups.csv")
+    df_icd = pd.read_csv(os.path.join(DATA_DIR, "ICD10_Groups.csv"))
     # convert df_icd to a reasonable mapping
     icd2group = {
         (letter, f"{i:02}"): subgroup
