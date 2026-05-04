@@ -2,7 +2,7 @@
 #SBATCH --job-name=stgnn-ehr-preproc
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
-#SBATCH --time=08:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=48G
 
