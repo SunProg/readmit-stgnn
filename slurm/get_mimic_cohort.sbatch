@@ -15,6 +15,7 @@ set -euo pipefail
 # Optional:
 #   PYTHON_BIN=/path/to/python
 #   LOG_DIR=/path/to/logs
+#   UV_PYTHON=3.10
 
 RAW_DATA_DIR="${RAW_DATA_DIR:-$HOME/database/mimic-iv/mimiciv/2.2}"
 SAVE_DIR="${SAVE_DIR:-$HOME/repo/readmit-stgnn/stgnn/data/mimic_processed}"
@@ -22,6 +23,7 @@ SPLIT_JSON="${SPLIT_JSON:-$HOME/repo/ehr-text-multi-modal/results/mimiciv/splits
 TEST_PARQUET="${TEST_PARQUET:-$HOME/repo/ehr-text-multi-modal/results/mimiciv/ethos_zero_shot/test_eval/hospital_readmission/output_with_note.predictions.parquet}"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 LOG_DIR="${LOG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}/logs}"
+UV_PYTHON="${UV_PYTHON:-3.10}"
 
 mkdir -p "$LOG_DIR" "$SAVE_DIR"
 
@@ -31,10 +33,24 @@ echo "SAVE_DIR=$SAVE_DIR"
 echo "SPLIT_JSON=$SPLIT_JSON"
 echo "TEST_PARQUET=$TEST_PARQUET"
 
-"$PYTHON_BIN" stgnn/get_mimic_cohort.py \
-  --raw_data_dir "$RAW_DATA_DIR" \
-  --save_dir "$SAVE_DIR" \
-  --split_json "$SPLIT_JSON" \
-  --test_parquet "$TEST_PARQUET"
+if command -v uv >/dev/null 2>&1; then
+  uv run --no-project --python "$UV_PYTHON" \
+    --with numpy \
+    --with pandas \
+    --with pandarallel \
+    --with tqdm \
+    --with pyarrow \
+    python stgnn/get_mimic_cohort.py \
+      --raw_data_dir "$RAW_DATA_DIR" \
+      --save_dir "$SAVE_DIR" \
+      --split_json "$SPLIT_JSON" \
+      --test_parquet "$TEST_PARQUET"
+else
+  "$PYTHON_BIN" stgnn/get_mimic_cohort.py \
+    --raw_data_dir "$RAW_DATA_DIR" \
+    --save_dir "$SAVE_DIR" \
+    --split_json "$SPLIT_JSON" \
+    --test_parquet "$TEST_PARQUET"
+fi
 
 echo "Done."

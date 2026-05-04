@@ -46,7 +46,7 @@ sbatch --export=ALL,RAW_DATA_DIR=$HOME/database/mimic-iv/mimiciv/2.2,SAVE_DIR=$H
 sbatch --export=ALL,COHORT_DIR=$HOME/repo/readmit-stgnn/stgnn/data/mimic_processed,SAVE_DIR=$HOME/repo/readmit-stgnn/stgnn/data/mimic_processed slurm/preprocess_ehr.sbatch
 ```
 
-Optional override: add `,PYTHON_BIN=/path/to/python` to either `--export` list.
+These scripts run with `uv` automatically when available in isolated mode (`uv run --no-project`) to avoid installing unrelated project dependencies; they fall back to `PYTHON_BIN` otherwise. Optional override: add `,UV_PYTHON=3.10` or `,PYTHON_BIN=/path/to/python` to `--export`.
 
 
 
