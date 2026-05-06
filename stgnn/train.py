@@ -221,7 +221,7 @@ def main(args):
         )
 
     model.to(device)
-    if args.model_name != "stgnn":
+    if args.compile_model and args.model_name != "stgnn":
         print("Compiling model...")
         model = torch.compile(model)
 

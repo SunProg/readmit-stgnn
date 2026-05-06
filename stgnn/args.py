@@ -147,6 +147,12 @@ def get_args():
         help="Name of ehr encoder.",
     )
     parser.add_argument(
+        "--compile_model",
+        default=False,
+        type=str2bool,
+        help="Whether to compile supported models with torch.compile.",
+    )
+    parser.add_argument(
         "--cat_emb_dim",
         type=int,
         default=1,
