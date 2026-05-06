@@ -128,3 +128,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 uv.lock
+stgnn/data/ckp
+stgnn/data/mimic_processed
