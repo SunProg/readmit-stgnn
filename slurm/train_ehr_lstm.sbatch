@@ -24,8 +24,20 @@ set -euo pipefail
 #   HPARAM_SEARCH=False
 #   COMPILE_MODEL=True
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="${REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+if [[ -z "${REPO_DIR:-}" ]]; then
+  for candidate in "${SLURM_SUBMIT_DIR:-}" "$PWD" "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; do
+    if [[ -n "$candidate" && -f "$candidate/stgnn/train.py" ]]; then
+      REPO_DIR="$candidate"
+      break
+    fi
+  done
+fi
+
+if [[ -z "${REPO_DIR:-}" || ! -f "$REPO_DIR/stgnn/train.py" ]]; then
+  echo "Could not locate repository root. Submit from the repo or export REPO_DIR=/path/to/readmit-stgnn." >&2
+  exit 1
+fi
+
 PREPROC_DIR="${PREPROC_DIR:-$REPO_DIR/stgnn/data/mimic_processed}"
 SAVE_DIR="${SAVE_DIR:-$REPO_DIR/stgnn/data/ckp/ehr_lstm}"
 DEMO_FILE="${DEMO_FILE:-$PREPROC_DIR/mimic_admission_demo.csv}"

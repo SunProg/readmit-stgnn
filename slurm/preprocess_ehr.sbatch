@@ -23,9 +23,25 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 LOG_DIR="${LOG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}/logs}"
 UV_PYTHON="${UV_PYTHON:-3.10}"
 
+if [[ -z "${REPO_DIR:-}" ]]; then
+  for candidate in "${SLURM_SUBMIT_DIR:-}" "$PWD" "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; do
+    if [[ -n "$candidate" && -f "$candidate/stgnn/preprocess_ehr.py" ]]; then
+      REPO_DIR="$candidate"
+      break
+    fi
+  done
+fi
+
+if [[ -z "${REPO_DIR:-}" || ! -f "$REPO_DIR/stgnn/preprocess_ehr.py" ]]; then
+  echo "Could not locate repository root. Submit from the repo or export REPO_DIR=/path/to/readmit-stgnn." >&2
+  exit 1
+fi
+
 mkdir -p "$LOG_DIR" "$SAVE_DIR"
+cd "$REPO_DIR"
 
 echo "Running EHR preprocessing..."
+echo "REPO_DIR=$REPO_DIR"
 echo "COHORT_DIR=$COHORT_DIR"
 echo "SAVE_DIR=$SAVE_DIR"
 
