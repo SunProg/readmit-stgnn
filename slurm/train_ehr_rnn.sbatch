@@ -23,10 +23,10 @@ set -euo pipefail
 #   EHR_ENCODER_NAME=embedder
 #   HPARAM_SEARCH=False
 #   COMPILE_MODEL=True
-#   CUDA_MODULE=cuda/12.2.1-gcc-13.2.0
+#   CUDA_MODULE=cuda/11.8.0-gcc-13.2.0
 #   CUDNN_MODULE=cudnn/8.7.0.84-11.8-gcc-13.2.0
 
-CUDA_MODULE="${CUDA_MODULE:-cuda/12.2.1-gcc-13.2.0}"
+CUDA_MODULE="${CUDA_MODULE:-cuda/11.8.0-gcc-13.2.0}"
 CUDNN_MODULE="${CUDNN_MODULE:-cudnn/8.7.0.84-11.8-gcc-13.2.0}"
 if ! type module >/dev/null 2>&1 && [[ -f /etc/profile.d/modules.sh ]]; then
   # Some Slurm shells do not initialize environment modules by default.
