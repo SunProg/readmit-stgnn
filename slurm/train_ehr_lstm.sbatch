@@ -73,6 +73,11 @@ echo "COMPILE_MODEL=$COMPILE_MODEL"
 echo "DGLBACKEND=$DGLBACKEND"
 echo "DGL_DOWNLOAD_DIR=$DGL_DOWNLOAD_DIR"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
+if command -v nvidia-smi >/dev/null 2>&1; then
+  nvidia-smi
+else
+  echo "nvidia-smi not found"
+fi
 
 train_args=(
   stgnn/train.py
@@ -104,6 +109,7 @@ train_args=(
   --num_epochs 100
   --final_pool last
   --model_name lstm
+  --require_cuda True
   --t_model gru
   --ehr_encoder_name "$EHR_ENCODER_NAME"
   --cat_emb_dim 3

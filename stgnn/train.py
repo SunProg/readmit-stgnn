@@ -22,6 +22,42 @@ from model.simple_lstm import SimpleLSTM
 from model.simple_rnn import SimpleRNN
 
 
+def get_device(args):
+    args.cuda = torch.cuda.is_available()
+    cuda_visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES", "unset")
+
+    if not args.cuda:
+        message = (
+            "CUDA is unavailable. "
+            "torch.version.cuda={}, CUDA_VISIBLE_DEVICES={}".format(
+                torch.version.cuda, cuda_visible_devices
+            )
+        )
+        if args.require_cuda:
+            raise RuntimeError(message)
+        return torch.device("cpu"), message
+
+    gpu_id = 0 if args.gpu_id is None else args.gpu_id
+    device_count = torch.cuda.device_count()
+    if gpu_id >= device_count:
+        raise ValueError(
+            "Requested gpu_id={} but PyTorch sees {} CUDA device(s). "
+            "CUDA_VISIBLE_DEVICES={}".format(gpu_id, device_count, cuda_visible_devices)
+        )
+
+    torch.cuda.set_device(gpu_id)
+    device = torch.device("cuda:{}".format(gpu_id))
+    message = (
+        "Using {} ({}) with torch.version.cuda={}, CUDA_VISIBLE_DEVICES={}".format(
+            device,
+            torch.cuda.get_device_name(device),
+            torch.version.cuda,
+            cuda_visible_devices,
+        )
+    )
+    return device, message
+
+
 def infer_early_stop_state(log_path):
     val_losses = []
     if not os.path.exists(log_path):
@@ -241,11 +277,7 @@ def evaluate(
 
 
 def main(args):
-    args.cuda = torch.cuda.is_available()
-    if torch.cuda.is_available():
-        device = "cuda"
-    else:
-        device = "cpu"
+    device, device_message = get_device(args)
 
     # set random seed
     utils.seed_torch(seed=args.rand_seed)
@@ -272,6 +304,7 @@ def main(args):
 
     logger = utils.get_logger(args.save_dir, "train")
     logger.info("Args: {}".format(dumps(vars(args), indent=4, sort_keys=True)))
+    logger.info(device_message)
 
     # load graph
     logger.info("Constructing graph...")

@@ -40,9 +40,15 @@ def get_args():
     )
     parser.add_argument(
         "--gpu_id",
-        default=0,
+        default=None,
         type=int,
-        help="Which GPU to use? If None, use default GPU.",
+        help="Which CUDA GPU index to use. If omitted, use cuda:0 when CUDA is available.",
+    )
+    parser.add_argument(
+        "--require_cuda",
+        default=False,
+        type=str2bool,
+        help="Fail instead of falling back to CPU when CUDA is unavailable.",
     )
     parser.add_argument("--rand_seed", type=int, default=123, help="Random seed.")
     parser.add_argument(
