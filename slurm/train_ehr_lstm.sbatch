@@ -26,6 +26,19 @@ set -euo pipefail
 #   CUDA_MODULE=cuda/12.2.1-gcc-13.2.0
 #   CUDNN_MODULE=cudnn/8.7.0.84-11.8-gcc-13.2.0
 
+CUDA_MODULE="${CUDA_MODULE:-cuda/12.2.1-gcc-13.2.0}"
+CUDNN_MODULE="${CUDNN_MODULE:-cudnn/8.7.0.84-11.8-gcc-13.2.0}"
+if ! type module >/dev/null 2>&1 && [[ -f /etc/profile.d/modules.sh ]]; then
+  # Some Slurm shells do not initialize environment modules by default.
+  source /etc/profile.d/modules.sh
+fi
+if type module >/dev/null 2>&1; then
+  module load "$CUDA_MODULE"
+  module load "$CUDNN_MODULE"
+else
+  echo "Environment modules are not available; skipping CUDA/CUDNN module loads."
+fi
+
 if [[ -z "${REPO_DIR:-}" ]]; then
   for candidate in "${SLURM_SUBMIT_DIR:-}" "$PWD" "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; do
     if [[ -n "$candidate" && -f "$candidate/stgnn/train.py" ]]; then
@@ -62,18 +75,8 @@ export DGL_DOWNLOAD_DIR
 mkdir -p "$LOG_DIR" "$SAVE_DIR" "$DGL_DOWNLOAD_DIR"
 cd "$REPO_DIR"
 
-CUDA_MODULE="${CUDA_MODULE:-cuda/12.2.1-gcc-13.2.0}"
-CUDNN_MODULE="${CUDNN_MODULE:-cudnn/8.7.0.84-11.8-gcc-13.2.0}"
-if ! type module >/dev/null 2>&1 && [[ -f /etc/profile.d/modules.sh ]]; then
-  # Some Slurm shells do not initialize environment modules by default.
-  source /etc/profile.d/modules.sh
-fi
 if type module >/dev/null 2>&1; then
-  module load "$CUDA_MODULE"
-  module load "$CUDNN_MODULE"
   module list
-else
-  echo "Environment modules are not available; skipping CUDA/CUDNN module loads."
 fi
 
 echo "Running EHR-based LSTM training..."
