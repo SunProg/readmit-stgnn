@@ -15,6 +15,23 @@ pip install -e .
 ```
 Note that you may need to install a different version of DGL depending on the CUDA version. See [DGL documentation](https://www.dgl.ai/pages/start.html) for details.
 
+### HPC CUDA Environment
+On the cluster with NVIDIA driver `535.288.01` and reported CUDA compatibility `12.2`, use CUDA 11.8 wheels for PyTorch and DGL. Do not update the NVIDIA driver for this project setup.
+
+From the repository root:
+```bash
+CUDA_MODULE=cuda/11.8.0-gcc-13.2.0 \
+CUDNN_MODULE=cudnn/8.7.0.84-11.8-gcc-13.2.0 \
+bash slurm/setup_cuda_venv.sh
+```
+
+The setup script recreates `.venv`, installs `torch==2.2.1` from the `cu118` PyTorch wheel index, installs `dgl==1.1.3+cu118`, and runs `stgnn/cuda_check.py`. The preflight should report `torch.__version__` containing `+cu118`, `torch.version.cuda=11.8`, `torch.cuda.is_available()=True`, `dgl_graph_device=cuda:0`, and `CUDA preflight OK`.
+
+After setup, submit the GPU training job:
+```bash
+sbatch slurm/train_ehr_stgnn.sbatch
+```
+
 ## Data
 ### Downloading MIMIC-IV
 We use the public [MIMIC-IV v1.0](https://physionet.org/content/mimiciv/1.0/) *hosp* module and [MIMIC-CXR-JPG v2.0.0](https://physionet.org/content/mimic-cxr-jpg/2.0.0/) in our study. Both datasets are publicly available for downloading after fulfilling certain requirements, e.g., registering on [physionet](https://physionet.org/), completing its required training, and signing the data use agreement. For more details, see [MIMIC-IV v1.0](https://physionet.org/content/mimiciv/1.0/) and [MIMIC-CXR-JPG v2.0.0](https://physionet.org/content/mimic-cxr-jpg/2.0.0/).
