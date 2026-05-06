@@ -17,10 +17,10 @@ set -euo pipefail
 #   PYTHON_BIN=/path/to/python
 #   LOG_DIR=/path/to/logs
 #   DEMO_FILE=/path/to/mimic_admission_demo.csv
-#   EHR_FEATURE_FILE=/path/to/ehr_preprocessed_seq_by_day_cat_embedding.pkl
-#   EDGE_EHR_FILE=/path/to/ehr_preprocessed_seq_by_day_one_hot.pkl
+#   EHR_FEATURE_FILE=/path/to/ehr_preprocessed_seq_by_day.pkl
+#   EDGE_EHR_FILE=/path/to/ehr_preprocessed_seq_by_day.pkl
 #   TEST_HADM_IDS_FILE=/path/to/test_hadm_ids.csv
-#   EHR_ENCODER_NAME=embedder
+#   EHR_ENCODER_NAME=embedder  # only when EHR_FEATURE_FILE has categorical cols
 #   HPARAM_SEARCH=False
 #   COMPILE_MODEL=True
 #   CUDA_MODULE=cuda/11.8.0-gcc-13.2.0
@@ -56,10 +56,39 @@ fi
 PREPROC_DIR="${PREPROC_DIR:-$REPO_DIR/stgnn/data/mimic_processed}"
 SAVE_DIR="${SAVE_DIR:-$REPO_DIR/stgnn/data/ckp/ehr_lstm}"
 DEMO_FILE="${DEMO_FILE:-$PREPROC_DIR/mimic_admission_demo.csv}"
-EHR_FEATURE_FILE="${EHR_FEATURE_FILE:-$PREPROC_DIR/ehr_preprocessed_seq_by_day_cat_embedding.pkl}"
-EDGE_EHR_FILE="${EDGE_EHR_FILE:-$PREPROC_DIR/ehr_preprocessed_seq_by_day_one_hot.pkl}"
+CAT_EHR_FEATURE_FILE="$PREPROC_DIR/ehr_preprocessed_seq_by_day_cat_embedding.pkl"
+DEFAULT_EHR_FEATURE_FILE="$PREPROC_DIR/ehr_preprocessed_seq_by_day.pkl"
+ONE_HOT_EDGE_EHR_FILE="$PREPROC_DIR/ehr_preprocessed_seq_by_day_one_hot.pkl"
+if [[ -z "${EHR_FEATURE_FILE:-}" ]]; then
+  if [[ -f "$CAT_EHR_FEATURE_FILE" ]]; then
+    EHR_FEATURE_FILE="$CAT_EHR_FEATURE_FILE"
+    EHR_FEATURE_SELECTION="auto-selected categorical embedding features"
+  else
+    EHR_FEATURE_FILE="$DEFAULT_EHR_FEATURE_FILE"
+    EHR_FEATURE_SELECTION="auto-selected standard preprocessed features"
+  fi
+else
+  EHR_FEATURE_SELECTION="explicit EHR_FEATURE_FILE"
+fi
+if [[ -z "${EDGE_EHR_FILE:-}" ]]; then
+  if [[ -f "$ONE_HOT_EDGE_EHR_FILE" ]]; then
+    EDGE_EHR_FILE="$ONE_HOT_EDGE_EHR_FILE"
+    EDGE_EHR_SELECTION="auto-selected one-hot edge features"
+  else
+    EDGE_EHR_FILE="$DEFAULT_EHR_FEATURE_FILE"
+    EDGE_EHR_SELECTION="auto-selected standard preprocessed edge features"
+  fi
+else
+  EDGE_EHR_SELECTION="explicit EDGE_EHR_FILE"
+fi
 TEST_HADM_IDS_FILE="${TEST_HADM_IDS_FILE:-}"
-EHR_ENCODER_NAME="${EHR_ENCODER_NAME:-embedder}"
+if [[ -z "${EHR_ENCODER_NAME+x}" ]]; then
+  if [[ "$EHR_FEATURE_FILE" == "$CAT_EHR_FEATURE_FILE" ]]; then
+    EHR_ENCODER_NAME="embedder"
+  else
+    EHR_ENCODER_NAME=""
+  fi
+fi
 HPARAM_SEARCH="${HPARAM_SEARCH:-True}"
 COMPILE_MODEL="${COMPILE_MODEL:-False}"
 if [[ -z "${PYTHON_BIN:-}" && -x "$REPO_DIR/.venv/bin/python" ]]; then
@@ -77,6 +106,23 @@ cd "$REPO_DIR"
 
 if type module >/dev/null 2>&1; then
   module list
+fi
+
+echo "EHR feature selection: $EHR_FEATURE_SELECTION -> $EHR_FEATURE_FILE"
+echo "Edge EHR feature selection: $EDGE_EHR_SELECTION -> $EDGE_EHR_FILE"
+if [[ ! -f "$DEMO_FILE" ]]; then
+  echo "DEMO_FILE does not exist: $DEMO_FILE" >&2
+  exit 1
+fi
+if [[ ! -f "$EHR_FEATURE_FILE" ]]; then
+  echo "EHR_FEATURE_FILE does not exist: $EHR_FEATURE_FILE" >&2
+  echo "Expected one of: $CAT_EHR_FEATURE_FILE or $DEFAULT_EHR_FEATURE_FILE" >&2
+  exit 1
+fi
+if [[ ! -f "$EDGE_EHR_FILE" ]]; then
+  echo "EDGE_EHR_FILE does not exist: $EDGE_EHR_FILE" >&2
+  echo "Expected one of: $ONE_HOT_EDGE_EHR_FILE or $DEFAULT_EHR_FEATURE_FILE" >&2
+  exit 1
 fi
 
 echo "Running EHR-based LSTM training..."
@@ -133,7 +179,6 @@ train_args=(
   --model_name lstm
   --require_cuda True
   --t_model gru
-  --ehr_encoder_name "$EHR_ENCODER_NAME"
   --cat_emb_dim 3
   --hparam_search "$HPARAM_SEARCH"
   --compile_model "$COMPILE_MODEL"
@@ -141,6 +186,10 @@ train_args=(
 
 if [[ -n "$TEST_HADM_IDS_FILE" ]]; then
   train_args+=(--test_hadm_ids_file "$TEST_HADM_IDS_FILE")
+fi
+
+if [[ -n "$EHR_ENCODER_NAME" ]]; then
+  train_args+=(--ehr_encoder_name "$EHR_ENCODER_NAME")
 fi
 
 "$PYTHON_BIN" "${train_args[@]}"
