@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -l
 #SBATCH --job-name=stgnn-ehr-train
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
