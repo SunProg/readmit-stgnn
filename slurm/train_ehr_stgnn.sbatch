@@ -21,6 +21,7 @@ set -euo pipefail
 #   EDGE_EHR_FILE=/path/to/ehr_preprocessed_seq_by_day.pkl
 #   TEST_HADM_IDS_FILE=/path/to/note_only_test_hadm_subject_ids.csv
 #   EHR_ENCODER_NAME=embedder  # only when EHR_FEATURE_FILE has categorical cols
+#   EARLY_STOP_MIN_DELTA=0.001
 #   CUDA_MODULE=cuda/11.8.0-gcc-13.2.0
 #   CUDNN_MODULE=cudnn/8.7.0.84-11.8-gcc-13.2.0
 
@@ -58,6 +59,7 @@ EHR_FEATURE_FILE="${EHR_FEATURE_FILE:-$PREPROC_DIR/ehr_preprocessed_seq_by_day.p
 EDGE_EHR_FILE="${EDGE_EHR_FILE:-$PREPROC_DIR/ehr_preprocessed_seq_by_day.pkl}"
 TEST_HADM_IDS_FILE="${TEST_HADM_IDS_FILE:-}"
 EHR_ENCODER_NAME="${EHR_ENCODER_NAME:-}"
+EARLY_STOP_MIN_DELTA="${EARLY_STOP_MIN_DELTA:-0.001}"
 if [[ -z "${PYTHON_BIN:-}" && -x "$REPO_DIR/.venv/bin/python" ]]; then
   PYTHON_BIN="$REPO_DIR/.venv/bin/python"
 else
@@ -83,6 +85,7 @@ echo "EHR_FEATURE_FILE=$EHR_FEATURE_FILE"
 echo "EDGE_EHR_FILE=$EDGE_EHR_FILE"
 echo "TEST_HADM_IDS_FILE=$TEST_HADM_IDS_FILE"
 echo "EHR_ENCODER_NAME=$EHR_ENCODER_NAME"
+echo "EARLY_STOP_MIN_DELTA=$EARLY_STOP_MIN_DELTA"
 echo "CUDA_MODULE=$CUDA_MODULE"
 echo "CUDNN_MODULE=$CUDNN_MODULE"
 echo "DGLBACKEND=$DGLBACKEND"
@@ -121,6 +124,7 @@ train_args=(
   --lr 3e-3 \
   --l2_wd 5e-4 \
   --patience 10 \
+  --early_stop_min_delta "$EARLY_STOP_MIN_DELTA" \
   --pos_weight 4 \
   --num_epochs 100 \
   --final_pool last \
