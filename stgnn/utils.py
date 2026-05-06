@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 import scipy.sparse as sp
-import pandas as pdƒ
+import pandas as pd
 from scipy.sparse import linalg
 from collections import defaultdict
 from datetime import datetime
@@ -89,6 +89,9 @@ def get_logger(log_dir, name):
     # Create logger
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
+    for handler in logger.handlers:
+        handler.close()
+    logger.handlers.clear()
 
     # Log everything (i.e., DEBUG level and above) to a file
     log_path = os.path.join(log_dir, "log.txt")
@@ -191,7 +194,16 @@ class CheckpointSaver:
         if self.log is not None:
             self.log.info(message)
 
-    def save(self, epoch, model, optimizer, metric_val):
+    def save(
+        self,
+        epoch,
+        model,
+        optimizer,
+        metric_val,
+        scheduler=None,
+        prev_val_loss=None,
+        patience_count=None,
+    ):
         """Save model parameters to disk.
         Args:
             step (int): Total number of examples seen during training so far.
@@ -199,24 +211,41 @@ class CheckpointSaver:
             metric_val (float): Determines whether checkpoint is best so far.
             device (torch.device): Device where model resides.
         """
+        new_best = self.is_best(metric_val)
+        best_val = metric_val if new_best else self.best_val
         ckpt_dict = {
             "epoch": epoch,
             "model_state": model.state_dict(),
             "optimizer_state": optimizer.state_dict(),
+            "metric_val": metric_val,
+            "best_metric_val": best_val,
+            "prev_val_loss": prev_val_loss,
+            "patience_count": patience_count,
         }
+        if scheduler is not None:
+            ckpt_dict["scheduler_state"] = scheduler.state_dict()
 
         checkpoint_path = os.path.join(self.save_dir, "last.pth.tar")
         torch.save(ckpt_dict, checkpoint_path)
 
         best_path = ""
-        if self.is_best(metric_val):
+        if new_best:
             # Save the best model
             self.best_val = metric_val
             best_path = os.path.join(self.save_dir, "best.pth.tar")
             shutil.copy(checkpoint_path, best_path)
             self._print("New best checkpoint at epoch {}...".format(epoch))
 
-    def save_multi(self, epoch, model_dict, optimizer_dict, metric_val):
+    def save_multi(
+        self,
+        epoch,
+        model_dict,
+        optimizer_dict,
+        metric_val,
+        scheduler=None,
+        prev_val_loss=None,
+        patience_count=None,
+    ):
         """Save multiple model parameters to disk.
         Args:
             step (int): Total number of examples seen during training so far.
@@ -225,11 +254,19 @@ class CheckpointSaver:
             device (torch.device): Device where model resides.
         """
 
+        new_best = self.is_best(metric_val)
+        best_val = metric_val if new_best else self.best_val
         ckpt_dict = {
             "epoch": epoch,
+            "metric_val": metric_val,
+            "best_metric_val": best_val,
+            "prev_val_loss": prev_val_loss,
+            "patience_count": patience_count,
             # 'model_state': model.state_dict(),
             # 'optimizer_state': optimizer.state_dict()
         }
+        if scheduler is not None:
+            ckpt_dict["scheduler_state"] = scheduler.state_dict()
 
         for model_name, model in model_dict.items():
             ckpt_dict[model_name + "_model_state"] = model.state_dict()
@@ -240,7 +277,7 @@ class CheckpointSaver:
         torch.save(ckpt_dict, checkpoint_path)
 
         best_path = ""
-        if self.is_best(metric_val):
+        if new_best:
             # Save the best model
             self.best_val = metric_val
             best_path = os.path.join(self.save_dir, "best.pth.tar")
@@ -248,16 +285,20 @@ class CheckpointSaver:
             self._print("New best checkpoint at epoch {}...".format(epoch))
 
 
-def load_model_checkpoint(checkpoint_file, model, optimizer=None):
-    checkpoint = torch.load(checkpoint_file)
+def load_model_checkpoint(checkpoint_file, model, optimizer=None, return_checkpoint=False):
+    checkpoint = torch.load(checkpoint_file, map_location="cpu")
     try:
         model.load_state_dict(checkpoint["model_state"])
     except:
         model.load_state_dict(checkpoint["model_state"], strict=False)
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state"])
+        if return_checkpoint:
+            return model, optimizer, checkpoint
         return model, optimizer
 
+    if return_checkpoint:
+        return model, checkpoint
     return model
 
 

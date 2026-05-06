@@ -27,6 +27,12 @@ def get_args():
         help="Model checkpoint to start training/testing from.",
     )
     parser.add_argument(
+        "--resume_run_dir",
+        type=str,
+        default=None,
+        help="Existing training run directory to resume from.",
+    )
+    parser.add_argument(
         "--do_train",
         default=True,
         type=str2bool,
@@ -268,8 +274,82 @@ def get_args():
         choices=("last", "mean", "all"),
         help="Which image to use for the patient for non-temporal models.",
     )
+    parser.add_argument(
+        "--hparam_search",
+        default=False,
+        type=str2bool,
+        help="Run validation-set hyperparameter search for simple RNN/LSTM models.",
+    )
+    parser.add_argument(
+        "--hparam_search_lrs",
+        nargs="+",
+        type=float,
+        default=[1e-5, 1e-4, 1e-3, 3e-3, 1e-2],
+        help="Learning rates to try for RNN/LSTM hyperparameter search.",
+    )
+    parser.add_argument(
+        "--hparam_search_hidden_dims",
+        nargs="+",
+        type=int,
+        default=[64, 128, 256],
+        help="Hidden dimensions to try for RNN/LSTM hyperparameter search.",
+    )
+    parser.add_argument(
+        "--hparam_search_num_rnn_layers",
+        nargs="+",
+        type=int,
+        default=[1, 2],
+        help="Recurrent layer counts to try for RNN/LSTM hyperparameter search.",
+    )
+    parser.add_argument(
+        "--hparam_search_dropouts",
+        nargs="+",
+        type=float,
+        default=[0.0, 0.2, 0.5],
+        help="Dropout values to try for RNN/LSTM hyperparameter search.",
+    )
+    parser.add_argument(
+        "--hparam_search_max_seq_len_ehr",
+        nargs="+",
+        type=int,
+        default=[3, 9, 15],
+        help="EHR sequence lengths to try for RNN/LSTM hyperparameter search.",
+    )
+    parser.add_argument(
+        "--hparam_search_cat_emb_dims",
+        nargs="+",
+        type=int,
+        default=[1, 2, 3],
+        help="Categorical embedding dimensions to try when ehr_encoder_name is set.",
+    )
 
     args = parser.parse_args()
+
+    if args.resume_run_dir is not None:
+        import json
+        import os
+
+        resume_run_dir = os.path.abspath(args.resume_run_dir)
+        args_file = os.path.join(resume_run_dir, "args.json")
+        if not os.path.exists(args_file):
+            raise ValueError(
+                "Could not find saved args.json in resume_run_dir: {}".format(
+                    resume_run_dir
+                )
+            )
+
+        cli_load_model_path = args.load_model_path
+        with open(args_file) as f:
+            saved_args = json.load(f)
+
+        for key, value in saved_args.items():
+            setattr(args, key, value)
+
+        args.resume_run_dir = resume_run_dir
+        args.save_dir = resume_run_dir
+        args.load_model_path = cli_load_model_path or os.path.join(
+            resume_run_dir, "last.pth.tar"
+        )
 
     # which metric to maximize
     if args.metric_name == "loss":

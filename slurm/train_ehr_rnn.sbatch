@@ -17,9 +17,11 @@ set -euo pipefail
 #   PYTHON_BIN=/path/to/python
 #   LOG_DIR=/path/to/logs
 #   DEMO_FILE=/path/to/mimic_admission_demo.csv
-#   EHR_FEATURE_FILE=/path/to/ehr_preprocessed_seq_by_day.pkl
-#   EDGE_EHR_FILE=/path/to/ehr_preprocessed_seq_by_day.pkl
+#   EHR_FEATURE_FILE=/path/to/ehr_preprocessed_seq_by_day_cat_embedding.pkl
+#   EDGE_EHR_FILE=/path/to/ehr_preprocessed_seq_by_day_one_hot.pkl
 #   TEST_HADM_IDS_FILE=/path/to/test_hadm_ids.csv
+#   EHR_ENCODER_NAME=embedder
+#   HPARAM_SEARCH=False
 #   COMPILE_MODEL=True
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,9 +29,11 @@ REPO_DIR="${REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PREPROC_DIR="${PREPROC_DIR:-$REPO_DIR/stgnn/data/mimic_processed}"
 SAVE_DIR="${SAVE_DIR:-$REPO_DIR/stgnn/data/ckp/ehr_rnn}"
 DEMO_FILE="${DEMO_FILE:-$PREPROC_DIR/mimic_admission_demo.csv}"
-EHR_FEATURE_FILE="${EHR_FEATURE_FILE:-$PREPROC_DIR/ehr_preprocessed_seq_by_day.pkl}"
-EDGE_EHR_FILE="${EDGE_EHR_FILE:-$PREPROC_DIR/ehr_preprocessed_seq_by_day.pkl}"
+EHR_FEATURE_FILE="${EHR_FEATURE_FILE:-$PREPROC_DIR/ehr_preprocessed_seq_by_day_cat_embedding.pkl}"
+EDGE_EHR_FILE="${EDGE_EHR_FILE:-$PREPROC_DIR/ehr_preprocessed_seq_by_day_one_hot.pkl}"
 TEST_HADM_IDS_FILE="${TEST_HADM_IDS_FILE:-}"
+EHR_ENCODER_NAME="${EHR_ENCODER_NAME:-embedder}"
+HPARAM_SEARCH="${HPARAM_SEARCH:-True}"
 COMPILE_MODEL="${COMPILE_MODEL:-False}"
 if [[ -z "${PYTHON_BIN:-}" && -x "$REPO_DIR/.venv/bin/python" ]]; then
   PYTHON_BIN="$REPO_DIR/.venv/bin/python"
@@ -51,6 +55,8 @@ echo "DEMO_FILE=$DEMO_FILE"
 echo "EHR_FEATURE_FILE=$EHR_FEATURE_FILE"
 echo "EDGE_EHR_FILE=$EDGE_EHR_FILE"
 echo "TEST_HADM_IDS_FILE=$TEST_HADM_IDS_FILE"
+echo "EHR_ENCODER_NAME=$EHR_ENCODER_NAME"
+echo "HPARAM_SEARCH=$HPARAM_SEARCH"
 echo "COMPILE_MODEL=$COMPILE_MODEL"
 echo "DGLBACKEND=$DGLBACKEND"
 echo "DGL_DOWNLOAD_DIR=$DGL_DOWNLOAD_DIR"
@@ -69,17 +75,27 @@ train_args=(
   --sim_measure euclidean
   --use_gauss_kernel True
   --max_seq_len_ehr 9
-  --train_batch_size 128
   --hidden_dim 256
-  --num_rnn_layers 3
+  --num_gcn_layers 1
+  --num_rnn_layers 1
+  --add_bias True
+  --g_conv graphsage
+  --aggregator_type mean
+  --num_classes 1
   --dropout 0.2
+  --activation_fn elu
   --metric_name auroc
-  --lr 0.001
+  --lr 3e-3
   --l2_wd 5e-4
   --patience 10
-  --pos_weight 1
+  --pos_weight 4
   --num_epochs 100
+  --final_pool last
   --model_name rnn
+  --t_model gru
+  --ehr_encoder_name "$EHR_ENCODER_NAME"
+  --cat_emb_dim 3
+  --hparam_search "$HPARAM_SEARCH"
   --compile_model "$COMPILE_MODEL"
 )
 

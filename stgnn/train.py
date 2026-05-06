@@ -1,5 +1,9 @@
 import json
 import os
+import pickle
+import re
+from copy import deepcopy
+from itertools import product
 from json import dumps
 
 import dgl
@@ -16,6 +20,142 @@ from data.dataset import ReadmissionDataset
 from model.model import GraphRNN, GConvLayers
 from model.simple_lstm import SimpleLSTM
 from model.simple_rnn import SimpleRNN
+
+
+def infer_early_stop_state(log_path):
+    val_losses = []
+    if not os.path.exists(log_path):
+        return 1e10, 0
+
+    with open(log_path) as f:
+        for line in f:
+            if "VAL -" not in line or "loss:" not in line:
+                continue
+            match = re.search(r"loss:\s*([0-9.eE+-]+)", line)
+            if match is not None:
+                val_losses.append(float(match.group(1)))
+
+    if not val_losses:
+        return 1e10, 0
+
+    best_loss = float("inf")
+    patience_count = 0
+    for loss in val_losses:
+        if loss < best_loss:
+            best_loss = loss
+            patience_count = 0
+        else:
+            patience_count += 1
+
+    return val_losses[-1], patience_count
+
+
+def set_cosine_scheduler_epoch(scheduler, optimizer, completed_epochs):
+    scheduler.last_epoch = completed_epochs
+    if hasattr(scheduler, "get_closed_form_lr"):
+        lrs = scheduler.get_closed_form_lr()
+    else:
+        lrs = scheduler._get_closed_form_lr()
+    for param_group, lr in zip(optimizer.param_groups, lrs):
+        param_group["lr"] = lr
+    scheduler._last_lr = lrs
+
+
+def run_baseline_hparam_search(args):
+    if args.model_name not in ("rnn", "lstm"):
+        raise ValueError("Hyperparameter search is only implemented for model_name rnn or lstm.")
+    if args.resume_run_dir is not None:
+        raise ValueError("Hyperparameter search does not support resume_run_dir.")
+    if not args.do_train:
+        raise ValueError("Hyperparameter search requires do_train=True.")
+
+    search_dir = utils.get_save_dir(args.save_dir, training=True)
+    logger = utils.get_logger(search_dir, "hparam_search")
+    logger.info("Running {} hyperparameter search in {}".format(args.model_name, search_dir))
+    logger.info("Args: {}".format(dumps(vars(args), indent=4, sort_keys=True)))
+
+    cat_emb_dims = (
+        args.hparam_search_cat_emb_dims
+        if args.ehr_encoder_name is not None
+        else [args.cat_emb_dim]
+    )
+    search_space = list(
+        product(
+            args.hparam_search_lrs,
+            args.hparam_search_num_rnn_layers,
+            args.hparam_search_hidden_dims,
+            args.hparam_search_dropouts,
+            args.hparam_search_max_seq_len_ehr,
+            cat_emb_dims,
+        )
+    )
+    logger.info("Search space has {} trials.".format(len(search_space)))
+
+    results = []
+    trials_dir = os.path.join(search_dir, "trials")
+    os.makedirs(trials_dir, exist_ok=True)
+
+    for trial_idx, (
+            lr,
+            num_rnn_layers,
+            hidden_dim,
+            dropout,
+            max_seq_len_ehr,
+            cat_emb_dim,
+    ) in enumerate(search_space, start=1):
+        trial_args = deepcopy(args)
+        trial_args.hparam_search = False
+        trial_args.metric_name = "auroc"
+        trial_args.maximize_metric = True
+        trial_args.lr = lr
+        trial_args.num_rnn_layers = num_rnn_layers
+        trial_args.hidden_dim = hidden_dim
+        trial_args.dropout = dropout
+        trial_args.max_seq_len_ehr = max_seq_len_ehr
+        trial_args.cat_emb_dim = cat_emb_dim
+        trial_args.save_dir = os.path.join(trials_dir, "trial_{:03d}".format(trial_idx))
+
+        hparams = {
+            "lr": lr,
+            "num_rnn_layers": num_rnn_layers,
+            "hidden_dim": hidden_dim,
+            "dropout": dropout,
+            "max_seq_len_ehr": max_seq_len_ehr,
+            "cat_emb_dim": cat_emb_dim,
+        }
+        logger.info(
+            "Starting trial {}/{}: {}".format(trial_idx, len(search_space), hparams)
+        )
+        val_auroc = main(trial_args)
+        result = {
+            "trial": trial_idx,
+            "val_auroc": val_auroc,
+            "save_dir": trial_args.save_dir,
+            **hparams,
+        }
+        results.append(result)
+
+        results_file = os.path.join(search_dir, "hparam_search_results.json")
+        with open(results_file, "w") as f:
+            json.dump(results, f, indent=4, sort_keys=True)
+
+        best_result = max(results, key=lambda item: item["val_auroc"])
+        with open(os.path.join(search_dir, "best_hparams.json"), "w") as f:
+            json.dump(best_result, f, indent=4, sort_keys=True)
+        logger.info(
+            "Finished trial {}/{} with val_auroc={:.4f}. Current best={:.4f} from trial {}.".format(
+                trial_idx,
+                len(search_space),
+                val_auroc,
+                best_result["val_auroc"],
+                best_result["trial"],
+            )
+        )
+
+    best_result = max(results, key=lambda item: item["val_auroc"])
+    logger.info("Best hyperparameters: {}".format(dumps(best_result, indent=4, sort_keys=True)))
+    logger.info("Search results saved to {}".format(search_dir))
+    return best_result["val_auroc"]
 
 
 def auc_ci(y_true, y_pred, num_bootstraps=1000, ci=95):
@@ -86,23 +226,47 @@ def evaluate(
             lower_bound, upper_bound = auc_ci(labels[nid], probs, num_bootstraps=1000)
             eval_results["ci_lower"] = lower_bound
             eval_results["ci_upper"] = upper_bound
+        if save_file is not None:
+            with open(save_file, "wb") as pf:
+                pickle.dump(
+                    {
+                        "labels": labels[nid].numpy(),
+                        "probs": probs.numpy(),
+                        "preds": preds,
+                        "results": eval_results,
+                    },
+                    pf,
+                )
     return eval_results
 
 
 def main(args):
     args.cuda = torch.cuda.is_available()
-    device = "cuda" if args.cuda else "cpu"
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
 
     # set random seed
     utils.seed_torch(seed=args.rand_seed)
 
+    if args.hparam_search:
+        return run_baseline_hparam_search(args)
+
+    is_resume = args.resume_run_dir is not None
+
     # get save directories
-    args.save_dir = utils.get_save_dir(
-        args.save_dir, training=True if args.do_train else False
-    )
+    if is_resume:
+        args.save_dir = args.resume_run_dir
+    else:
+        args.save_dir = utils.get_save_dir(
+            args.save_dir, training=True if args.do_train else False
+        )
 
     # save args
-    args_file = os.path.join(args.save_dir, "args.json")
+    args_file = os.path.join(
+        args.save_dir, "resume_args.json" if is_resume else "args.json"
+    )
     with open(args_file, "w") as f:
         json.dump(vars(args), f, indent=4, sort_keys=True)
 
@@ -197,6 +361,10 @@ def main(args):
             output_size=1,
             num_layers=args.num_rnn_layers,
             dropout=args.dropout,
+            ehr_encoder_name=args.ehr_encoder_name,
+            cat_idxs=cat_idxs,
+            cat_dims=cat_dims,
+            cat_emb_dim=args.cat_emb_dim,
         )
     elif args.model_name == "lstm":
         in_dim = features.shape[-1]
@@ -207,6 +375,10 @@ def main(args):
             output_size=1,
             num_layers=args.num_rnn_layers,
             dropout=args.dropout,
+            ehr_encoder_name=args.ehr_encoder_name,
+            cat_idxs=cat_idxs,
+            cat_dims=cat_dims,
+            cat_emb_dim=args.cat_emb_dim,
         )
     else:
         in_dim = features.shape[-1]
@@ -231,9 +403,10 @@ def main(args):
     )
 
     # load model checkpoint
+    checkpoint = None
     if args.load_model_path is not None:
-        model, optimizer = utils.load_model_checkpoint(
-            args.load_model_path, model, optimizer
+        model, optimizer, checkpoint = utils.load_model_checkpoint(
+            args.load_model_path, model, optimizer, return_checkpoint=True
         )
 
     # count params
@@ -256,19 +429,73 @@ def main(args):
     # scheduler
     logger.info("Using cosine annealing scheduler...")
     scheduler = CosineAnnealingLR(optimizer, T_max=args.num_epochs)
+    start_epoch = 0
+    prev_val_loss = 1e10
+    patience_count = 0
+
+    if checkpoint is not None:
+        start_epoch = checkpoint.get("epoch", 0)
+        if "scheduler_state" in checkpoint:
+            scheduler.load_state_dict(checkpoint["scheduler_state"])
+        else:
+            set_cosine_scheduler_epoch(scheduler, optimizer, start_epoch)
+
+        prev_val_loss = checkpoint.get("prev_val_loss", None)
+        patience_count = checkpoint.get("patience_count", None)
+        if prev_val_loss is None or patience_count is None:
+            prev_val_loss, patience_count = infer_early_stop_state(
+                os.path.join(args.save_dir, "log.txt")
+            )
+
+        logger.info(
+            "Resuming {} from checkpoint epoch {}. Next epoch will be {}.".format(
+                args.save_dir, start_epoch, start_epoch + 1
+            )
+        )
+        logger.info(
+            "Resume early-stop state: prev_val_loss={:.3f}, patience_count={}".format(
+                prev_val_loss, patience_count
+            )
+        )
+
+    if is_resume:
+        best_path = os.path.join(args.save_dir, "best.pth.tar")
+        if os.path.exists(best_path):
+            resume_model_state = {
+                key: value.detach().cpu().clone()
+                for key, value in model.state_dict().items()
+            }
+            model = utils.load_model_checkpoint(best_path, model)
+            best_eval_results = evaluate(
+                args=args,
+                model=model,
+                graph=g,
+                features=features,
+                labels=labels,
+                nid=val_nid,
+                loss_fn=loss_fn,
+                device=device,
+            )
+            saver.best_val = best_eval_results[args.metric_name]
+            logger.info(
+                "Existing best checkpoint validation {}: {:.3f}".format(
+                    args.metric_name, saver.best_val
+                )
+            )
+            model.load_state_dict(resume_model_state)
+            model.to(device)
 
     if args.do_train:
         # Train
         logger.info("Training...")
         model.train()
-        epoch = 0
-        prev_val_loss = 1e10
-        patience_count = 0
+        epoch = start_epoch
         early_stop = False
 
         while (epoch != args.num_epochs) and (not early_stop):
 
             epoch += 1
+            scheduler_stepped = False
             logger.info("Starting epoch {}...".format(epoch))
             train_loss = []
 
@@ -305,13 +532,24 @@ def main(args):
                     device=device,
                 )
                 model.train()
-                saver.save(epoch, model, optimizer, eval_results[args.metric_name])
                 # accumulate patience for early stopping
                 if eval_results["loss"] < prev_val_loss:
                     patience_count = 0
                 else:
                     patience_count += 1
                 prev_val_loss = eval_results["loss"]
+
+                scheduler.step()
+                scheduler_stepped = True
+                saver.save(
+                    epoch,
+                    model,
+                    optimizer,
+                    eval_results[args.metric_name],
+                    scheduler=scheduler,
+                    prev_val_loss=prev_val_loss,
+                    patience_count=patience_count,
+                )
 
                 # Early stop
                 if patience_count == args.patience:
@@ -327,7 +565,8 @@ def main(args):
                 logger.info("VAL - {}".format(results_str))
 
             # step lr scheduler
-            scheduler.step()
+            if not scheduler_stepped:
+                scheduler.step()
 
         logger.info("Training DONE.")
         best_path = os.path.join(args.save_dir, "best.pth.tar")
