@@ -1,4 +1,5 @@
 import pickle
+import sys
 
 import dgl
 import numpy as np
@@ -9,6 +10,16 @@ from sklearn.preprocessing import StandardScaler
 
 from .readmission_utils import get_readmission_label_mimic, get_feat_seq, \
     get_time_varying_edges, compute_dist_mat, compute_edges
+
+
+def _load_numpy_pickle(path):
+    if not hasattr(np, "_core"):
+        sys.modules.setdefault("numpy._core", np.core)
+        sys.modules.setdefault("numpy._core.multiarray", np.core.multiarray)
+        sys.modules.setdefault("numpy._core.numeric", np.core.numeric)
+
+    with open(path, "rb") as pf:
+        return pickle.load(pf)
 
 
 def construct_graph_readmission(
@@ -79,8 +90,7 @@ def construct_graph_readmission(
     val_masks = torch.from_numpy(val_mask_np)
     test_masks = torch.from_numpy(test_mask_np)
 
-    with open(ehr_feature_file, "rb") as pf:
-        raw_feat_dict = pickle.load(pf)
+    raw_feat_dict = _load_numpy_pickle(ehr_feature_file)
     feat_dict = raw_feat_dict["feat_dict"]
     feat_cols = raw_feat_dict["feature_cols"]
     cols_to_keep = []
@@ -120,7 +130,7 @@ def construct_graph_readmission(
             if (feat_cols.index(col) in raw_feat_dict["cat_idxs"])
         ]
         cat_idxs = [cols_to_keep.index(col) for col in cat_cols]
-        cat_dims = [cat_col2dim[col] for col in cat_cols]
+        cat_dims = [int(cat_col2dim[col]) for col in cat_cols]
     else:
         cat_idxs = []
         cat_dims = []
@@ -163,8 +173,7 @@ def construct_graph_readmission(
             or ("med" in edge_modality)
     ):
         assert edge_ehr_file is not None
-        with open(edge_ehr_file, "rb") as pf:
-            raw_ehr_dict = pickle.load(pf)
+        raw_ehr_dict = _load_numpy_pickle(edge_ehr_file)
         feat_cols = raw_ehr_dict["feature_cols"]
         node_edge_dict = {}
 

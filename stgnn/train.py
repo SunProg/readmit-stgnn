@@ -50,20 +50,24 @@ def evaluate(
 ):
     model.eval()
     with torch.no_grad():
-        dataset = TensorDataset(features[nid], labels[nid])
-        dataloader = DataLoader(dataset, batch_size=2048, shuffle=False)
-        preds, losses = [], []
-        for inputs, targets in dataloader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            logits = model(inputs).squeeze()
-            loss = loss_fn(logits, targets)
+        if args.model_name == "stgnn":
+            logits, _ = model(graph, features.to(device))
+            logits = logits.squeeze()[nid].cpu()
+            loss = loss_fn(logits.to(device), labels[nid].to(device)).cpu()
+        else:
+            dataset = TensorDataset(features[nid], labels[nid])
+            dataloader = DataLoader(dataset, batch_size=2048, shuffle=False)
+            preds, losses = [], []
+            for inputs, targets in dataloader:
+                inputs, targets = inputs.to(device), targets.to(device)
+                logits = model(inputs).squeeze()
+                loss = loss_fn(logits, targets)
 
-            losses.append(loss.item())
-            preds.append(logits.cpu())
+                losses.append(loss.item())
+                preds.append(logits.cpu())
 
-        loss = torch.tensor(losses).mean()
-
-        logits = torch.cat(preds, dim=0)
+            loss = torch.tensor(losses).mean()
+            logits = torch.cat(preds, dim=0)
         probs = torch.sigmoid(logits)
 
         preds = (probs >= best_thresh).int().numpy()
@@ -133,6 +137,7 @@ def main(args):
     # ensure self-edges
     g = dgl.remove_self_loop(g)
     g = dgl.add_self_loop(g)
+    g = g.to(device)
     n_edges = g.number_of_edges()
     n_nodes = g.number_of_nodes()
     logger.info(
@@ -176,7 +181,7 @@ def main(args):
             n_classes=args.num_classes,
             device=device,
             is_classifier=True,
-            ehr_encoder_name="embedder" if args.feature_type != "imaging" else None,
+            ehr_encoder_name=args.ehr_encoder_name,
             cat_idxs=cat_idxs,
             cat_dims=cat_dims,
             cat_emb_dim=args.cat_emb_dim,
@@ -216,8 +221,9 @@ def main(args):
         )
 
     model.to(device)
-    print("Compiling model...")
-    model = torch.compile(model)
+    if args.model_name != "stgnn":
+        print("Compiling model...")
+        model = torch.compile(model)
 
     # define optimizer
     optimizer = torch.optim.Adam(
@@ -266,16 +272,24 @@ def main(args):
             logger.info("Starting epoch {}...".format(epoch))
             train_loss = []
 
-            dataset = TensorDataset(features[train_nid], labels[train_nid])
-            dataloader = DataLoader(dataset, batch_size=args.train_batch_size, shuffle=True)
-            for inputs, targets in tqdm(dataloader):
+            if args.model_name == "stgnn":
                 optimizer.zero_grad()
-                inputs, targets = inputs.to(device), targets.to(device)
-                logits = model(inputs).squeeze()
-                loss = loss_fn(logits, targets)
+                logits, _ = model(g, features.to(device))
+                loss = loss_fn(logits.squeeze()[train_nid], labels[train_nid].to(device))
                 train_loss.append(loss.item())
                 loss.backward()
                 optimizer.step()
+            else:
+                dataset = TensorDataset(features[train_nid], labels[train_nid])
+                dataloader = DataLoader(dataset, batch_size=args.train_batch_size, shuffle=True)
+                for inputs, targets in tqdm(dataloader):
+                    optimizer.zero_grad()
+                    inputs, targets = inputs.to(device), targets.to(device)
+                    logits = model(inputs).squeeze()
+                    loss = loss_fn(logits, targets)
+                    train_loss.append(loss.item())
+                    loss.backward()
+                    optimizer.step()
 
             # evaluate on val set
             if epoch % args.eval_every == 0:
