@@ -58,6 +58,19 @@ def get_device(args):
     return device, message
 
 
+def cuda_memory_message(device):
+    if device.type != "cuda":
+        return None
+    torch.cuda.synchronize(device)
+    return (
+        "CUDA memory MiB: allocated={:.1f}, reserved={:.1f}, max_allocated={:.1f}".format(
+            torch.cuda.memory_allocated(device) / 1024 / 1024,
+            torch.cuda.memory_reserved(device) / 1024 / 1024,
+            torch.cuda.max_memory_allocated(device) / 1024 / 1024,
+        )
+    )
+
+
 def infer_early_stop_state(log_path):
     val_losses = []
     if not os.path.exists(log_path):
@@ -426,6 +439,10 @@ def main(args):
         )
 
     model.to(device)
+    memory_message = cuda_memory_message(device)
+    if memory_message is not None:
+        logger.info(memory_message)
+
     if args.compile_model and args.model_name != "stgnn":
         print("Compiling model...")
         model = torch.compile(model)
@@ -550,6 +567,10 @@ def main(args):
                     train_loss.append(loss.item())
                     loss.backward()
                     optimizer.step()
+
+            memory_message = cuda_memory_message(device)
+            if memory_message is not None:
+                logger.info(memory_message)
 
             # evaluate on val set
             if epoch % args.eval_every == 0:

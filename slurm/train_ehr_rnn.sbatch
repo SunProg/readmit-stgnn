@@ -78,6 +78,7 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 else
   echo "nvidia-smi not found"
 fi
+"$PYTHON_BIN" stgnn/cuda_check.py
 
 train_args=(
   stgnn/train.py
