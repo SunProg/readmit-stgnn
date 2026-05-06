@@ -22,6 +22,8 @@ set -euo pipefail
 #   TEST_HADM_IDS_FILE=/path/to/test_hadm_ids.csv
 #   EHR_ENCODER_NAME=embedder  # only when EHR_FEATURE_FILE has categorical cols
 #   HPARAM_SEARCH=False
+#   HPARAM_SEARCH_NUM_TRIALS=10
+#   EARLY_STOP_MIN_DELTA=0.001
 #   COMPILE_MODEL=True
 #   CUDA_MODULE=cuda/11.8.0-gcc-13.2.0
 #   CUDNN_MODULE=cudnn/8.7.0.84-11.8-gcc-13.2.0
@@ -90,6 +92,8 @@ if [[ -z "${EHR_ENCODER_NAME+x}" ]]; then
   fi
 fi
 HPARAM_SEARCH="${HPARAM_SEARCH:-True}"
+HPARAM_SEARCH_NUM_TRIALS="${HPARAM_SEARCH_NUM_TRIALS:-10}"
+EARLY_STOP_MIN_DELTA="${EARLY_STOP_MIN_DELTA:-0.001}"
 COMPILE_MODEL="${COMPILE_MODEL:-False}"
 if [[ -z "${PYTHON_BIN:-}" && -x "$REPO_DIR/.venv/bin/python" ]]; then
   PYTHON_BIN="$REPO_DIR/.venv/bin/python"
@@ -134,6 +138,8 @@ echo "EDGE_EHR_FILE=$EDGE_EHR_FILE"
 echo "TEST_HADM_IDS_FILE=$TEST_HADM_IDS_FILE"
 echo "EHR_ENCODER_NAME=$EHR_ENCODER_NAME"
 echo "HPARAM_SEARCH=$HPARAM_SEARCH"
+echo "HPARAM_SEARCH_NUM_TRIALS=$HPARAM_SEARCH_NUM_TRIALS"
+echo "EARLY_STOP_MIN_DELTA=$EARLY_STOP_MIN_DELTA"
 echo "COMPILE_MODEL=$COMPILE_MODEL"
 echo "CUDA_MODULE=$CUDA_MODULE"
 echo "CUDNN_MODULE=$CUDNN_MODULE"
@@ -173,6 +179,7 @@ train_args=(
   --lr 3e-3
   --l2_wd 5e-4
   --patience 10
+  --early_stop_min_delta "$EARLY_STOP_MIN_DELTA"
   --pos_weight 4
   --num_epochs 100
   --final_pool last
@@ -181,6 +188,7 @@ train_args=(
   --t_model gru
   --cat_emb_dim 3
   --hparam_search "$HPARAM_SEARCH"
+  --hparam_search_num_trials "$HPARAM_SEARCH_NUM_TRIALS"
   --compile_model "$COMPILE_MODEL"
 )
 

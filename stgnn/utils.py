@@ -202,6 +202,7 @@ class CheckpointSaver:
         metric_val,
         scheduler=None,
         prev_val_loss=None,
+        best_val_loss=None,
         patience_count=None,
     ):
         """Save model parameters to disk.
@@ -220,6 +221,7 @@ class CheckpointSaver:
             "metric_val": metric_val,
             "best_metric_val": best_val,
             "prev_val_loss": prev_val_loss,
+            "best_val_loss": best_val_loss,
             "patience_count": patience_count,
         }
         if scheduler is not None:

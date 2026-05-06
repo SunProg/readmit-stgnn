@@ -1,6 +1,7 @@
 import json
 import os
 import pickle
+import random
 import re
 from copy import deepcopy
 from itertools import product
@@ -71,7 +72,7 @@ def cuda_memory_message(device):
     )
 
 
-def infer_early_stop_state(log_path):
+def infer_early_stop_state(log_path, min_delta=0.0):
     val_losses = []
     if not os.path.exists(log_path):
         return 1e10, 0
@@ -90,13 +91,13 @@ def infer_early_stop_state(log_path):
     best_loss = float("inf")
     patience_count = 0
     for loss in val_losses:
-        if loss < best_loss:
+        if loss < best_loss - min_delta:
             best_loss = loss
             patience_count = 0
         else:
             patience_count += 1
 
-    return val_losses[-1], patience_count
+    return best_loss, patience_count
 
 
 def set_cosine_scheduler_epoch(scheduler, optimizer, completed_epochs):
@@ -139,6 +140,17 @@ def run_baseline_hparam_search(args):
         )
     )
     logger.info("Search space has {} trials.".format(len(search_space)))
+    if args.hparam_search_num_trials is not None:
+        if args.hparam_search_num_trials <= 0:
+            raise ValueError("hparam_search_num_trials must be positive.")
+        if args.hparam_search_num_trials < len(search_space):
+            rng = random.Random(args.rand_seed)
+            search_space = rng.sample(search_space, args.hparam_search_num_trials)
+            logger.info(
+                "Randomly sampled {} trials with rand_seed={}.".format(
+                    len(search_space), args.rand_seed
+                )
+            )
 
     results = []
     trials_dir = os.path.join(search_dir, "trials")
@@ -480,7 +492,7 @@ def main(args):
     logger.info("Using cosine annealing scheduler...")
     scheduler = CosineAnnealingLR(optimizer, T_max=args.num_epochs)
     start_epoch = 0
-    prev_val_loss = 1e10
+    best_val_loss = 1e10
     patience_count = 0
 
     if checkpoint is not None:
@@ -490,11 +502,14 @@ def main(args):
         else:
             set_cosine_scheduler_epoch(scheduler, optimizer, start_epoch)
 
-        prev_val_loss = checkpoint.get("prev_val_loss", None)
+        best_val_loss = checkpoint.get(
+            "best_val_loss", checkpoint.get("prev_val_loss", None)
+        )
         patience_count = checkpoint.get("patience_count", None)
-        if prev_val_loss is None or patience_count is None:
-            prev_val_loss, patience_count = infer_early_stop_state(
-                os.path.join(args.save_dir, "log.txt")
+        if best_val_loss is None or patience_count is None:
+            best_val_loss, patience_count = infer_early_stop_state(
+                os.path.join(args.save_dir, "log.txt"),
+                min_delta=args.early_stop_min_delta,
             )
 
         logger.info(
@@ -503,8 +518,8 @@ def main(args):
             )
         )
         logger.info(
-            "Resume early-stop state: prev_val_loss={:.3f}, patience_count={}".format(
-                prev_val_loss, patience_count
+            "Resume early-stop state: best_val_loss={:.3f}, patience_count={}".format(
+                best_val_loss, patience_count
             )
         )
 
@@ -587,11 +602,11 @@ def main(args):
                 )
                 model.train()
                 # accumulate patience for early stopping
-                if eval_results["loss"] < prev_val_loss:
+                if eval_results["loss"] < best_val_loss - args.early_stop_min_delta:
+                    best_val_loss = eval_results["loss"]
                     patience_count = 0
                 else:
                     patience_count += 1
-                prev_val_loss = eval_results["loss"]
 
                 scheduler.step()
                 scheduler_stepped = True
@@ -601,7 +616,8 @@ def main(args):
                     optimizer,
                     eval_results[args.metric_name],
                     scheduler=scheduler,
-                    prev_val_loss=prev_val_loss,
+                    prev_val_loss=best_val_loss,
+                    best_val_loss=best_val_loss,
                     patience_count=patience_count,
                 )
 

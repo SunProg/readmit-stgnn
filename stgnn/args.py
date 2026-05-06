@@ -57,6 +57,12 @@ def get_args():
         default=10,
         help="Number of patience epochs before early stopping.",
     )
+    parser.add_argument(
+        "--early_stop_min_delta",
+        type=float,
+        default=0.0,
+        help="Minimum validation loss improvement required to reset early stopping patience.",
+    )
 
     # data args
     parser.add_argument(
@@ -327,6 +333,12 @@ def get_args():
         type=int,
         default=[1, 2, 3],
         help="Categorical embedding dimensions to try when ehr_encoder_name is set.",
+    )
+    parser.add_argument(
+        "--hparam_search_num_trials",
+        type=int,
+        default=None,
+        help="Randomly sample this many RNN/LSTM hyperparameter trials; omit to run all.",
     )
 
     args = parser.parse_args()
