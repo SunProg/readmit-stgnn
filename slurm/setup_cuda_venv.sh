@@ -11,6 +11,7 @@ TORCH_VERSION="${TORCH_VERSION:-2.2.1}"
 DGL_VERSION="${DGL_VERSION:-1.1.3}"
 CUDA_WHEEL_TAG="${CUDA_WHEEL_TAG:-cu118}"
 EXPECTED_TORCH_CUDA_VERSION="${EXPECTED_TORCH_CUDA_VERSION:-11.8}"
+NUMPY_CONSTRAINT="${NUMPY_CONSTRAINT:-numpy<2}"
 PYTORCH_INDEX_URL="${PYTORCH_INDEX_URL:-https://download.pytorch.org/whl/$CUDA_WHEEL_TAG}"
 DGL_WHEEL_URL="${DGL_WHEEL_URL:-https://data.dgl.ai/wheels/$CUDA_WHEEL_TAG/repo.html}"
 
@@ -44,15 +45,18 @@ uv pip install --reinstall \
   "dgl==$DGL_VERSION+$CUDA_WHEEL_TAG" \
   -f "$DGL_WHEEL_URL"
 
-uv pip install -e .
+uv pip install -e . "$NUMPY_CONSTRAINT"
 
 .venv/bin/python - <<PY
 import sys
 
 import dgl
+import numpy
 import torch
 
 errors = []
+if int(numpy.__version__.split(".", 1)[0]) >= 2:
+    errors.append("expected NumPy <2, got {}".format(numpy.__version__))
 if "+$CUDA_WHEEL_TAG" not in torch.__version__:
     errors.append("expected torch.__version__ to include '+$CUDA_WHEEL_TAG'")
 if torch.version.cuda != "$EXPECTED_TORCH_CUDA_VERSION":
@@ -62,6 +66,7 @@ if torch.version.cuda != "$EXPECTED_TORCH_CUDA_VERSION":
         )
     )
 print("python_executable={}".format(sys.executable))
+print("numpy.__version__={}".format(numpy.__version__))
 print("torch.__version__={}".format(torch.__version__))
 print("torch.version.cuda={}".format(torch.version.cuda))
 print("dgl.__version__={}".format(dgl.__version__))

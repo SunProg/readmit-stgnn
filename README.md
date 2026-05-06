@@ -25,7 +25,7 @@ CUDNN_MODULE=cudnn/8.7.0.84-11.8-gcc-13.2.0 \
 bash slurm/setup_cuda_venv.sh
 ```
 
-The setup script recreates `.venv`, installs `torch==2.2.1` from the `cu118` PyTorch wheel index, installs `dgl==1.1.3+cu118`, and runs `stgnn/cuda_check.py`. The preflight should report `torch.__version__` containing `+cu118`, `torch.version.cuda=11.8`, `torch.cuda.is_available()=True`, `dgl_graph_device=cuda:0`, and `CUDA preflight OK`.
+The setup script recreates `.venv`, installs `torch==2.2.1` from the `cu118` PyTorch wheel index, installs `dgl==1.1.3+cu118`, pins `numpy<2` for compatibility with these compiled wheels, and runs `stgnn/cuda_check.py`. The preflight should report `numpy.__version__` below `2.0`, `torch.__version__` containing `+cu118`, `torch.version.cuda=11.8`, `torch.cuda.is_available()=True`, `dgl_graph_device=cuda:0`, and `CUDA preflight OK`.
 
 After setup, submit the GPU training job:
 ```bash
