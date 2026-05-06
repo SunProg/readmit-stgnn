@@ -15,6 +15,7 @@ def construct_graph_readmission(
         df_demo,
         ehr_feature_file=None,
         edge_ehr_file=None,
+        test_hadm_ids_file=None,
         edge_modality=("demo",),
         top_perc=0.01,
         gauss_kernel=True,
@@ -51,14 +52,32 @@ def construct_graph_readmission(
         splits,
         hospital_stays,
     ) = get_readmission_label_mimic(df_demo)
-    train_idxs = np.array([ind for ind in range(len(splits)) if splits[ind] == "train"])
+    hadm_ids = df_demo.hadm_id.astype(int).to_numpy()
 
     # node name to node index dict
     node2idx = {name: idx for idx, name in enumerate(node_names)}
 
-    train_masks = torch.from_numpy(splits == "train")
-    val_masks = torch.from_numpy(splits == "val")
-    test_masks = torch.from_numpy(splits == "test")
+    if test_hadm_ids_file is not None:
+        df_test_hadm = pd.read_csv(test_hadm_ids_file)
+        hadm_col = "hadm_id" if "hadm_id" in df_test_hadm.columns else df_test_hadm.columns[0]
+        test_hadm_ids = set(
+            pd.to_numeric(df_test_hadm[hadm_col], errors="coerce")
+            .dropna()
+            .astype(int)
+        )
+        test_mask_np = np.array([hadm_id in test_hadm_ids for hadm_id in hadm_ids])
+        train_mask_np = (splits == "train") & ~test_mask_np
+        val_mask_np = (splits == "val") & ~test_mask_np
+    else:
+        train_mask_np = splits == "train"
+        val_mask_np = splits == "val"
+        test_mask_np = splits == "test"
+
+    train_idxs = np.nonzero(train_mask_np)[0]
+
+    train_masks = torch.from_numpy(train_mask_np)
+    val_masks = torch.from_numpy(val_mask_np)
+    test_masks = torch.from_numpy(test_mask_np)
 
     with open(ehr_feature_file, "rb") as pf:
         raw_feat_dict = pickle.load(pf)
@@ -280,6 +299,7 @@ class ReadmissionDataset(DGLDataset):
             demo_file,
             edge_ehr_file=None,
             ehr_feature_file=None,
+            test_hadm_ids_file=None,
             edge_modality=("demo",),
             feature_type="multimodal",
             img_feature_dir=None,
@@ -314,6 +334,7 @@ class ReadmissionDataset(DGLDataset):
         self.img_feature_dir = img_feature_dir
         self.ehr_feature_file = ehr_feature_file
         self.edge_ehr_file = edge_ehr_file
+        self.test_hadm_ids_file = test_hadm_ids_file
         self.top_perc = top_perc
         self.gauss_kernel = gauss_kernel
         self.max_seq_len_img = max_seq_len_img
@@ -346,6 +367,7 @@ class ReadmissionDataset(DGLDataset):
             df_demo=self.df_all,
             ehr_feature_file=self.ehr_feature_file,
             edge_ehr_file=self.edge_ehr_file,
+            test_hadm_ids_file=self.test_hadm_ids_file,
             edge_modality=self.edge_modality,
             top_perc=self.top_perc,
             gauss_kernel=self.gauss_kernel,

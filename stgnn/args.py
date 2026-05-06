@@ -61,6 +61,12 @@ def get_args():
         help="Preprocessed EHR features for nodes features.",
     )
     parser.add_argument(
+        "--test_hadm_ids_file",
+        type=str,
+        default=None,
+        help="Optional CSV of hadm_id values to use as the test mask.",
+    )
+    parser.add_argument(
         "--img_feature_dir", type=str, help="Dir to extracted CXR features."
     )
     parser.add_argument(

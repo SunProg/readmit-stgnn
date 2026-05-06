@@ -111,6 +111,7 @@ def main(args):
         demo_file=args.demo_file,
         edge_ehr_file=args.edge_ehr_file,
         ehr_feature_file=args.ehr_feature_file,
+        test_hadm_ids_file=args.test_hadm_ids_file,
         edge_modality=args.edge_modality,
         top_perc=args.edge_top_perc,
         gauss_kernel=args.use_gauss_kernel,
