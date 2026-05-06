@@ -64,6 +64,10 @@ nvidia-nvjitlink-cu12==12.3.101
     #   nvidia-cusparse-cu12
 nvidia-nvtx-cu12==12.1.105
     # via torch
+packaging==23.2
+    # via
+    #   dgl
+    #   stgnn
 pandas==2.0.3
 psutil==5.9.8
     # via dgl
