@@ -255,7 +255,7 @@ def get_args():
         "--metric_name",
         type=str,
         default="F1",
-        choices=("F1", "acc", "loss", "auroc", "aupr"),
+        choices=("F1", "acc", "loss", "auroc", "auprc"),
         help="Name of dev metric to determine best checkpoint.",
     )
     parser.add_argument("--l2_wd", type=float, default=5e-4, help="L2 weight decay.")
@@ -373,7 +373,7 @@ def get_args():
     if args.metric_name == "loss":
         # Best checkpoint is the one that minimizes loss
         args.maximize_metric = False
-    elif args.metric_name in ("F1", "acc", "auroc", "aupr"):
+    elif args.metric_name in ("F1", "acc", "auroc", "auprc"):
         # Best checkpoint is the one that maximizes F1 or acc
         args.maximize_metric = True
     else:

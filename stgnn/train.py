@@ -10,7 +10,7 @@ from json import dumps
 import dgl
 import torch
 import torch.nn as nn
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import average_precision_score, roc_auc_score
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
@@ -235,6 +235,24 @@ def auc_ci(y_true, y_pred, num_bootstraps=1000, ci=95):
     return lower_bound.item(), upper_bound.item()
 
 
+def aupr_ci(y_true, y_pred, num_bootstraps=1000, ci=95):
+    y_true_np = y_true.numpy() if hasattr(y_true, "numpy") else y_true
+    y_pred_np = y_pred.numpy() if hasattr(y_pred, "numpy") else y_pred
+    bootstrap_means = torch.empty(num_bootstraps)
+
+    for i in range(num_bootstraps):
+        indices = torch.randint(0, len(y_pred_np), (len(y_pred_np),))
+        bootstrap_means[i] = average_precision_score(y_true_np[indices.numpy()], y_pred_np[indices.numpy()])
+
+    lower_percentile = (100 - ci) / 2
+    upper_percentile = 100 - lower_percentile
+
+    lower_bound = bootstrap_means.quantile(lower_percentile / 100)
+    upper_bound = bootstrap_means.quantile(upper_percentile / 100)
+
+    return lower_bound.item(), upper_bound.item()
+
+
 def evaluate(
         args,
         model,
@@ -285,8 +303,11 @@ def evaluate(
 
         if evaluate_ci:
             lower_bound, upper_bound = auc_ci(labels[nid], probs, num_bootstraps=1000)
-            eval_results["ci_lower"] = lower_bound
-            eval_results["ci_upper"] = upper_bound
+            eval_results["auroc_ci_lower"] = lower_bound
+            eval_results["auroc_ci_upper"] = upper_bound
+            aupr_lower, aupr_upper = aupr_ci(labels[nid], probs, num_bootstraps=1000)
+            eval_results["auprc_ci_lower"] = aupr_lower
+            eval_results["auprc_ci_upper"] = aupr_upper
         if save_file is not None:
             with open(save_file, "wb") as pf:
                 pickle.dump(

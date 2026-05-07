@@ -357,7 +357,7 @@ def eval_dict(
     scores_dict = {}
     if len(np.unique(y)) == 2:  # binary case
         scores_dict["auroc"] = roc_auc_score(y_true=y, y_score=y_prob)
-        scores_dict["aupr"] = average_precision_score(y, y_prob)
+        scores_dict["auprc"] = average_precision_score(y, y_prob)
         tn, fp, fn, tp = confusion_matrix(y_true=y, y_pred=y_pred).ravel()
         scores_dict["specificity"] = tn / (tn + fp)
 
